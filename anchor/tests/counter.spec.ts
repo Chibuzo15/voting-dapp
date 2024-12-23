@@ -1,76 +1,50 @@
-import * as anchor from '@coral-xyz/anchor'
-import {Program} from '@coral-xyz/anchor'
-import {Keypair} from '@solana/web3.js'
-import {Counter} from '../target/types/counter'
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { Keypair, PublicKey } from "@solana/web3.js";
+// import { Counter } from "../target/types/counter";
+import { Voting } from "../target/types/voting";
 
-describe('counter', () => {
-  // Configure the client to use the local cluster.
-  const provider = anchor.AnchorProvider.env()
-  anchor.setProvider(provider)
-  const payer = provider.wallet as anchor.Wallet
+import { BankrunProvider, startAnchor } from "anchor-bankrun";
 
-  const program = anchor.workspace.Counter as Program<Counter>
+const IDL = require("../target/idl/voting.json");
 
-  const counterKeypair = Keypair.generate()
+const votingAddress = new PublicKey(
+  "coUnmi3oBUtwtd9fjeAvSsJssXh5A5xyPbhpewyzRVF"
+);
 
-  it('Initialize Counter', async () => {
-    await program.methods
-      .initialize()
-      .accounts({
-        counter: counterKeypair.publicKey,
-        payer: payer.publicKey,
-      })
-      .signers([counterKeypair])
-      .rpc()
+describe("Voting", () => {
+  it("Initialize Poll", async () => {
+    const context = await startAnchor(
+      "",
+      [{ name: "voting", programId: votingAddress }],
+      []
+    );
+    const provider = new BankrunProvider(context);
 
-    const currentCount = await program.account.counter.fetch(counterKeypair.publicKey)
+    const votingProgram = new Program<Voting>(IDL, provider);
 
-    expect(currentCount.count).toEqual(0)
-  })
+    await votingProgram.methods
+      .initializePoll(
+        new anchor.BN(1),
+        "What is your favorite type of peanut butter?",
+        new anchor.BN(0),
+        new anchor.BN(1834964009)
+      )
+      .rpc();
 
-  it('Increment Counter', async () => {
-    await program.methods.increment().accounts({ counter: counterKeypair.publicKey }).rpc()
+    const [pollAddress] = PublicKey.findProgramAddressSync(
+      [new anchor.BN(1).toArrayLike(Buffer, "le", 8)],
+      votingAddress
+    );
 
-    const currentCount = await program.account.counter.fetch(counterKeypair.publicKey)
+    const poll = await votingProgram.account.poll.fetch(pollAddress);
 
-    expect(currentCount.count).toEqual(1)
-  })
+    console.log(poll);
 
-  it('Increment Counter Again', async () => {
-    await program.methods.increment().accounts({ counter: counterKeypair.publicKey }).rpc()
-
-    const currentCount = await program.account.counter.fetch(counterKeypair.publicKey)
-
-    expect(currentCount.count).toEqual(2)
-  })
-
-  it('Decrement Counter', async () => {
-    await program.methods.decrement().accounts({ counter: counterKeypair.publicKey }).rpc()
-
-    const currentCount = await program.account.counter.fetch(counterKeypair.publicKey)
-
-    expect(currentCount.count).toEqual(1)
-  })
-
-  it('Set counter value', async () => {
-    await program.methods.set(42).accounts({ counter: counterKeypair.publicKey }).rpc()
-
-    const currentCount = await program.account.counter.fetch(counterKeypair.publicKey)
-
-    expect(currentCount.count).toEqual(42)
-  })
-
-  it('Set close the counter account', async () => {
-    await program.methods
-      .close()
-      .accounts({
-        payer: payer.publicKey,
-        counter: counterKeypair.publicKey,
-      })
-      .rpc()
-
-    // The account should no longer exist, returning null.
-    const userAccount = await program.account.counter.fetchNullable(counterKeypair.publicKey)
-    expect(userAccount).toBeNull()
-  })
-})
+    expect(poll.pollId.toNumber()).toBe(1);
+    expect(poll.description).toEqual(
+      "What is your favorite type of peanut butter?"
+    );
+    expect(poll.pollStart.toNumber()).toBeLessThan(poll.pollEnd);
+  });
+});

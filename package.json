@@ -46,7 +46,7 @@
   },
   "create-solana-dapp": {
     "rename": {
-      "counter": {
+      "voting": {
         "to": "{{name}}",
         "paths": [
           "anchor",
